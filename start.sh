@@ -22,6 +22,7 @@ cleanup() {
     pkill -f "google-chrome" 2>/dev/null || true
     pkill -f "chromium-browser" 2>/dev/null || true
     pkill -f openbox 2>/dev/null || true
+    pkill -f tint2 2>/dev/null || true
     pkill -f dbus-daemon 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -84,11 +85,14 @@ cat <<EOF > /app/chrome_profile/Default/Preferences
 }
 EOF
 
-# 4. Openbox Window Manager Configuration
+# 4. Openbox Window Manager Configuration (Single desktop, autostart)
 mkdir -p /root/.config/openbox /etc/xdg/openbox
 cat << 'EOF' > /root/.config/openbox/rc.xml
 <?xml version="1.0" encoding="UTF-8"?>
 <openbox_config xmlns="http://openbox.org/3.4/rc">
+  <desktops>
+    <number>1</number>
+  </desktops>
   <theme>
     <titleLayout></titleLayout>
   </theme>
@@ -107,48 +111,57 @@ echo "Starting openbox window manager..."
 openbox --sm-disable &
 sleep 1
 
-# 5. Launch Chrome
-echo "Launching Chrome with Violentmonkey..."
-chromium-browser \
-    --no-sandbox \
-    --disable-dev-shm-usage \
-    --disable-gpu \
-    --ozone-platform=x11 \
-    --enable-features=UseOzonePlatform \
-    --start-maximized \
-    --no-first-run \
-    --no-default-browser-check \
-    --disable-translate \
-    --disable-notifications \
-    --disable-default-apps \
-    --window-size=1280,720 \
-    --window-position=0,0 \
-    --noerrdialogs \
-    --remote-debugging-port=9222 \
-    --remote-allow-origins=* \
-    --user-data-dir=/app/chrome_profile \
-    --load-extension=/app/extensions/violentmonkey \
-    --disable-features=Translate \
-    https://teaserfast.ru/login/ &
+echo "Starting tint2 taskbar..."
+tint2 &
+sleep 1
 
-# Ensure Chrome window is mapped, raised, and active
+# 5. Launch Chrome in supervised loop so it never stays closed
+echo "Starting Chrome supervisor..."
+(
+    while true; do
+        echo "Launching Chrome with Violentmonkey..."
+        chromium-browser \
+            --no-sandbox \
+            --disable-dev-shm-usage \
+            --disable-gpu \
+            --ozone-platform=x11 \
+            --enable-features=UseOzonePlatform \
+            --start-maximized \
+            --no-first-run \
+            --no-default-browser-check \
+            --disable-translate \
+            --disable-notifications \
+            --disable-default-apps \
+            --window-size=1280,720 \
+            --window-position=0,0 \
+            --noerrdialogs \
+            --user-data-dir=/app/chrome_profile \
+            --load-extension=/app/extensions/violentmonkey \
+            --disable-features=Translate \
+            https://teaserfast.ru/login/ || true
+        echo "Chrome exited, restarting in 2 seconds..."
+        sleep 2
+    done
+) &
+
+# Ensure visible Chrome window is active and raised
 (
     for i in $(seq 1 30); do
         sleep 1
-        WIDS=$(xdotool search --class "chrome" 2>/dev/null || xdotool search --class "chromium" 2>/dev/null || true)
-        if [ -n "$WIDS" ]; then
-            for W in $WIDS; do
-                xdotool windowactivate "$W" 2>/dev/null || true
-                xdotool windowraise "$W" 2>/dev/null || true
-                xdotool windowmap "$W" 2>/dev/null || true
-            done
-            echo "Chrome window activated via xdotool: $WIDS"
+        WID=$(xdotool search --onlyvisible --class "google-chrome" 2>/dev/null | tail -n 1 || true)
+        if [ -z "$WID" ]; then
+            WID=$(xdotool search --onlyvisible --class "chromium" 2>/dev/null | tail -n 1 || true)
+        fi
+        if [ -n "$WID" ]; then
+            echo "Activating visible Chrome window: $WID"
+            xdotool windowactivate "$WID" 2>/dev/null || true
+            xdotool windowraise "$WID" 2>/dev/null || true
             break
         fi
     done
 ) &
 
-# 6. Run Chrome configuration agent in background
+# 6. Run Chrome preferences & pinning agent in background
 python3 /app/configure_chrome.py &
 
 # 7. Start x11vnc with polling and damage

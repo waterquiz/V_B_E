@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     x11vnc \
     openbox \
+    tint2 \
     menu \
     python3 \
     python3-pip \
