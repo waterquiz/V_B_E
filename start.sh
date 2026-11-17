@@ -21,7 +21,8 @@ cleanup() {
     pkill -f websockify 2>/dev/null || true
     pkill -f "google-chrome" 2>/dev/null || true
     pkill -f "chromium-browser" 2>/dev/null || true
-    pkill -f fluxbox 2>/dev/null || true
+    pkill -f openbox 2>/dev/null || true
+    pkill -f tint2 2>/dev/null || true
     pkill -f dbus-daemon 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -61,20 +62,19 @@ export DISPLAY="${DISPLAY}"
 # Set desktop background
 xsetroot -solid "#2c3e50" 2>/dev/null || true
 
-# 3. Start Fluxbox Window Manager
-echo "Starting fluxbox..."
-mkdir -p /root/.fluxbox
-cat << 'EOF' > /root/.fluxbox/init
-session.screen0.toolbar.visible: false
-EOF
-fluxbox &
+# 3. Start Window Manager (Openbox + tint2 panel)
+echo "Starting openbox..."
+openbox --sm-disable &
 sleep 1
 
-# 4. Clean profile directory to avoid corrupt preferences on startup
-rm -rf /app/chrome_profile/Default/Preferences 2>/dev/null || true
+echo "Starting tint2 panel..."
+tint2 &
+sleep 1
+
+# 4. Initialize clean profile directory if needed
 mkdir -p /app/chrome_profile
 
-# 5. Launch Google Chrome in supervised loop
+# 5. Launch Google Chrome in supervised loop with memory constraints
 echo "Starting Chrome supervisor..."
 (
     while true; do
@@ -89,11 +89,34 @@ echo "Starting Chrome supervisor..."
             --no-default-browser-check \
             --window-size=1280,720 \
             --window-position=0,0 \
+            --disable-background-networking \
+            --disable-sync \
+            --mute-audio \
+            --js-flags="--max-old-space-size=256" \
+            --renderer-process-limit=2 \
+            --disable-features=Translate,OptimizationHints,MediaRouter \
             --user-data-dir=/app/chrome_profile \
             --load-extension=/app/extensions/violentmonkey \
             https://teaserfast.ru/login/ || true
         echo "Chrome exited, restarting in 2 seconds..."
         sleep 2
+    done
+) &
+
+# Ensure visible Chrome window is active and raised
+(
+    for i in $(seq 1 30); do
+        sleep 1
+        WID=$(xdotool search --onlyvisible --class "google-chrome" 2>/dev/null | tail -n 1 || true)
+        if [ -z "$WID" ]; then
+            WID=$(xdotool search --onlyvisible --class "chromium" 2>/dev/null | tail -n 1 || true)
+        fi
+        if [ -n "$WID" ]; then
+            echo "Activating visible Chrome window: $WID"
+            xdotool windowactivate "$WID" 2>/dev/null || true
+            xdotool windowraise "$WID" 2>/dev/null || true
+            break
+        fi
     done
 ) &
 
