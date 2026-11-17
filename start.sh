@@ -85,7 +85,7 @@ cat <<EOF > /app/chrome_profile/Default/Preferences
 }
 EOF
 
-# 4. Openbox Window Manager Configuration (Single desktop, autostart)
+# 4. Openbox Window Manager Configuration
 mkdir -p /root/.config/openbox /etc/xdg/openbox
 cat << 'EOF' > /root/.config/openbox/rc.xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -93,13 +93,9 @@ cat << 'EOF' > /root/.config/openbox/rc.xml
   <desktops>
     <number>1</number>
   </desktops>
-  <theme>
-    <titleLayout></titleLayout>
-  </theme>
   <applications>
     <application class="*">
       <maximized>yes</maximized>
-      <decor>no</decor>
       <focus>yes</focus>
     </application>
   </applications>
@@ -115,7 +111,7 @@ echo "Starting tint2 taskbar..."
 tint2 &
 sleep 1
 
-# 5. Launch Chrome in supervised loop so it never stays closed
+# 5. Launch Chrome in supervised loop with software compositing
 echo "Starting Chrome supervisor..."
 (
     while true; do
@@ -124,6 +120,8 @@ echo "Starting Chrome supervisor..."
             --no-sandbox \
             --disable-dev-shm-usage \
             --disable-gpu \
+            --disable-gpu-compositing \
+            --password-store=basic \
             --ozone-platform=x11 \
             --enable-features=UseOzonePlatform \
             --start-maximized \
@@ -137,7 +135,7 @@ echo "Starting Chrome supervisor..."
             --noerrdialogs \
             --user-data-dir=/app/chrome_profile \
             --load-extension=/app/extensions/violentmonkey \
-            --disable-features=Translate \
+            --disable-features=Translate,OptimizationHints,MediaRouter \
             https://teaserfast.ru/login/ || true
         echo "Chrome exited, restarting in 2 seconds..."
         sleep 2
