@@ -33,6 +33,10 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
+RUN dbus-uuidgen > /etc/machine-id && \
+    mkdir -p /var/lib/dbus && \
+    cp /etc/machine-id /var/lib/dbus/machine-id
+
 RUN wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && apt-get update \
     && apt-get install -y /tmp/chrome.deb \

@@ -6,10 +6,23 @@ import websocket
 
 EXTENSION_ID = "oclhhmlkjfdjmklecinlepakkifmkaja"
 
+def recv_matching(ws, req_id, timeout=10):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            raw = ws.recv()
+            if not raw:
+                continue
+            msg = json.loads(raw)
+            if msg.get("id") == req_id:
+                return msg
+        except Exception:
+            break
+    return None
+
 def configure():
     print("=== Chrome Configuration Agent ===")
     
-    # 1. Wait for Chrome debug port to open
     debug_url = "http://127.0.0.1:9222/json/version"
     browser_ws_url = None
     
@@ -30,12 +43,11 @@ def configure():
         return False
 
     browser_ws = None
-    target_id = None
     try:
         print(f"Connecting to browser WebSocket: {browser_ws_url}")
         browser_ws = websocket.create_connection(browser_ws_url, timeout=10)
 
-        # 2. Dynamically load unpacked extension just in case
+        # 1. Dynamically load unpacked extension
         try:
             load_cmd = {
                 "id": 101,
@@ -45,86 +57,66 @@ def configure():
                 }
             }
             browser_ws.send(json.dumps(load_cmd))
-            load_res = json.loads(browser_ws.recv())
+            load_res = recv_matching(browser_ws, 101, timeout=5)
             print(f"Extensions.loadUnpacked result: {load_res}")
         except Exception as e:
             print(f"Note on loadUnpacked: {e}")
 
-        # 3. Create target for chrome://extensions
-        print("Opening chrome://extensions target via CDP...")
-        create_cmd = {
-            "id": 102,
-            "method": "Target.createTarget",
-            "params": {
-                "url": "chrome://extensions"
-            }
-        }
-        browser_ws.send(json.dumps(create_cmd))
-        create_res = json.loads(browser_ws.recv())
-        target_id = create_res.get("result", {}).get("targetId")
-        print(f"Target created: {target_id}")
+        # 2. Get existing targets
+        browser_ws.send(json.dumps({"id": 102, "method": "Target.getTargets"}))
+        targets_res = recv_matching(browser_ws, 102, timeout=5)
+        existing_targets = targets_res.get("result", {}).get("targetInfos", []) if targets_res else []
+        print(f"Existing targets count: {len(existing_targets)}")
+        for t in existing_targets:
+            print(f" - Target: {t.get('type')} | {t.get('url')} | {t.get('title')}")
 
+        # 3. Create or find chrome://extensions target
+        target_id = None
+        for t in existing_targets:
+            if "chrome://extensions" in t.get("url", ""):
+                target_id = t.get("targetId")
+                break
+
+        created_new = False
         if not target_id:
-            # Fallback to search in existing targets
-            browser_ws.send(json.dumps({"id": 103, "method": "Target.getTargets"}))
-            targets_res = json.loads(browser_ws.recv())
-            for t in targets_res.get("result", {}).get("targetInfos", []):
-                if "chrome://extensions" in t.get("url", ""):
-                    target_id = t.get("targetId")
-                    break
+            browser_ws.send(json.dumps({"id": 103, "method": "Target.createTarget", "params": {"url": "chrome://extensions"}}))
+            create_res = recv_matching(browser_ws, 103, timeout=5)
+            target_id = create_res.get("result", {}).get("targetId") if create_res else None
+            created_new = True
+            print(f"Target chrome://extensions created: {target_id}")
 
         if target_id:
             # 4. Attach to the target
-            print(f"Attaching to target {target_id}...")
-            attach_cmd = {
-                "id": 104,
-                "method": "Target.attachToTarget",
-                "params": {
-                    "targetId": target_id,
-                    "flatten": True
-                }
-            }
-            browser_ws.send(json.dumps(attach_cmd))
-            attach_res = json.loads(browser_ws.recv())
-            session_id = attach_res.get("result", {}).get("sessionId")
-            print(f"Session ID: {session_id}")
+            browser_ws.send(json.dumps({"id": 104, "method": "Target.attachToTarget", "params": {"targetId": target_id, "flatten": True}}))
+            attach_res = recv_matching(browser_ws, 104, timeout=5)
+            session_id = attach_res.get("result", {}).get("sessionId") if attach_res else None
+            print(f"Attached session ID: {session_id}")
 
             if session_id:
-                # 5. Execute configuration script inside chrome://extensions
                 js_code = """
                 (async () => {
                     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-                    
-                    // Enable Developer Mode
                     if (chrome && chrome.developerPrivate && chrome.developerPrivate.updateProfileConfiguration) {
                         await new Promise((resolve) => {
                             chrome.developerPrivate.updateProfileConfiguration({ inDeveloperMode: true }, () => resolve(true));
                         });
                     }
-                    
-                    await sleep(1000);
-                    
-                    // Get all extensions
+                    await sleep(500);
                     let extensions = [];
                     if (chrome && chrome.developerPrivate && chrome.developerPrivate.getExtensionsInfo) {
-                        for (let i = 0; i < 15; i++) {
+                        for (let i = 0; i < 10; i++) {
                             extensions = await new Promise((resolve) => {
                                 chrome.developerPrivate.getExtensionsInfo({ includeDisabled: true, includeTerminated: true }, (res) => resolve(res || []));
                             });
                             if (extensions && extensions.length > 0) break;
-                            await sleep(500);
+                            await sleep(300);
                         }
                     }
-                    
-                    // Find Violentmonkey
                     const ext = extensions.find(e => 
                         e.id === "oclhhmlkjfdjmklecinlepakkifmkaja" ||
                         e.name.toLowerCase().includes("hanomonkey") || 
-                        e.name.toLowerCase().includes("vilan monkey") || 
-                        e.name.toLowerCase().includes("violentmonkey") || 
-                        (e.path && e.path.toLowerCase().includes("violentmonkey"))
+                        e.name.toLowerCase().includes("violentmonkey")
                     );
-                    
                     if (ext && chrome && chrome.developerPrivate && chrome.developerPrivate.updateExtensionConfiguration) {
                         await new Promise((resolve) => {
                             chrome.developerPrivate.updateExtensionConfiguration({
@@ -135,41 +127,28 @@ def configure():
                         });
                         return { status: "success", extension: ext.name, id: ext.id };
                     }
-                    return { status: "ready", available: (extensions || []).map(e => e.name + ' (' + e.id + ')') };
+                    return { status: "ready" };
                 })()
                 """
-
-                eval_cmd = {
+                browser_ws.send(json.dumps({
                     "id": 105,
                     "sessionId": session_id,
                     "method": "Runtime.evaluate",
-                    "params": {
-                        "expression": js_code,
-                        "awaitPromise": True,
-                        "returnByValue": True
-                    }
-                }
-                browser_ws.send(json.dumps(eval_cmd))
-                
-                # Wait for response (filtering out background events if any)
-                for _ in range(10):
-                    raw = browser_ws.recv()
-                    msg = json.loads(raw)
-                    if msg.get("id") == 105:
-                        print("Evaluation result:", json.dumps(msg, indent=2))
-                        break
+                    "params": {"expression": js_code, "awaitPromise": True, "returnByValue": True}
+                }))
+                eval_res = recv_matching(browser_ws, 105, timeout=10)
+                print("Evaluation result:", json.dumps(eval_res, indent=2))
 
-            # 6. Close the chrome://extensions tab so user sees the login page
-            print(f"Closing chrome://extensions tab (target ID: {target_id})...")
-            close_cmd = {
-                "id": 106,
-                "method": "Target.closeTarget",
-                "params": {
-                    "targetId": target_id
-                }
-            }
-            browser_ws.send(json.dumps(close_cmd))
-            print("Target closed:", browser_ws.recv())
+                # Navigate target to teaserfast login rather than closing so browser window is never closed
+                if created_new:
+                    print("Navigating extensions target to teaserfast login...")
+                    browser_ws.send(json.dumps({
+                        "id": 106,
+                        "sessionId": session_id,
+                        "method": "Page.navigate",
+                        "params": {"url": "https://teaserfast.ru/login/"}
+                    }))
+                    recv_matching(browser_ws, 106, timeout=5)
 
     except Exception as e:
         print(f"CDP configuration warning: {e}")

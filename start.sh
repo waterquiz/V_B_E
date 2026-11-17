@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+ulimit -n 65535 2>/dev/null || ulimit -n 4096 2>/dev/null || true
+
 DISPLAY_NUM=99
 DISPLAY=":${DISPLAY_NUM}"
 RESOLUTION="1280x720x24"
@@ -24,9 +26,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 1. Start D-Bus
-mkdir -p /var/run/dbus
-dbus-uuidgen --ensure 2>/dev/null || true
+# 1. Machine ID & D-Bus
+if [ ! -s /etc/machine-id ]; then
+    dbus-uuidgen > /etc/machine-id 2>/dev/null || true
+fi
+mkdir -p /var/lib/dbus /var/run/dbus
+cp -f /etc/machine-id /var/lib/dbus/machine-id 2>/dev/null || true
+
 dbus-daemon --system --fork 2>/dev/null || true
 eval $(dbus-launch --sh-syntax 2>/dev/null || echo "")
 export DBUS_SESSION_BUS_ADDRESS
@@ -52,7 +58,7 @@ done
 
 export DISPLAY="${DISPLAY}"
 
-# Set a background color so screen is not raw black
+# Set a background color
 xsetroot -solid "#2c3e50" 2>/dev/null || true
 
 # 3. Pre-configure Developer Mode and pinned extension in Preferences
@@ -78,7 +84,25 @@ cat <<EOF > /app/chrome_profile/Default/Preferences
 }
 EOF
 
-# 4. Start Window Manager
+# 4. Openbox Window Manager Configuration
+mkdir -p /root/.config/openbox /etc/xdg/openbox
+cat << 'EOF' > /root/.config/openbox/rc.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <theme>
+    <titleLayout></titleLayout>
+  </theme>
+  <applications>
+    <application class="*">
+      <maximized>yes</maximized>
+      <decor>no</decor>
+      <focus>yes</focus>
+    </application>
+  </applications>
+</openbox_config>
+EOF
+cp /root/.config/openbox/rc.xml /etc/xdg/openbox/rc.xml 2>/dev/null || true
+
 echo "Starting openbox window manager..."
 openbox --sm-disable &
 sleep 1
@@ -89,6 +113,8 @@ chromium-browser \
     --no-sandbox \
     --disable-dev-shm-usage \
     --disable-gpu \
+    --ozone-platform=x11 \
+    --enable-features=UseOzonePlatform \
     --start-maximized \
     --no-first-run \
     --no-default-browser-check \
@@ -97,7 +123,6 @@ chromium-browser \
     --disable-default-apps \
     --window-size=1280,720 \
     --window-position=0,0 \
-    --test-type \
     --noerrdialogs \
     --remote-debugging-port=9222 \
     --remote-allow-origins=* \
@@ -106,10 +131,27 @@ chromium-browser \
     --disable-features=Translate \
     https://teaserfast.ru/login/ &
 
+# Ensure Chrome window is mapped, raised, and active
+(
+    for i in $(seq 1 30); do
+        sleep 1
+        WIDS=$(xdotool search --class "chrome" 2>/dev/null || xdotool search --class "chromium" 2>/dev/null || true)
+        if [ -n "$WIDS" ]; then
+            for W in $WIDS; do
+                xdotool windowactivate "$W" 2>/dev/null || true
+                xdotool windowraise "$W" 2>/dev/null || true
+                xdotool windowmap "$W" 2>/dev/null || true
+            done
+            echo "Chrome window activated via xdotool: $WIDS"
+            break
+        fi
+    done
+) &
+
 # 6. Run Chrome configuration agent in background
 python3 /app/configure_chrome.py &
 
-# 7. Start x11vnc with polling and damage (no -noxdamage -nap to prevent black screen)
+# 7. Start x11vnc with polling and damage
 echo "Starting x11vnc..."
 if [ -n "$VNC_PASSWORD" ]; then
     x11vnc -display "${DISPLAY}" -rfbport "${VNC_PORT}" \
