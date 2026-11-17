@@ -62,7 +62,25 @@ export DISPLAY="${DISPLAY}"
 # Set desktop background
 xsetroot -solid "#2c3e50" 2>/dev/null || true
 
-# 3. Start Window Manager (Openbox + tint2 panel)
+# 3. Configure and Start Openbox & tint2
+mkdir -p /root/.config/openbox /etc/xdg/openbox
+cat << 'EOF' > /root/.config/openbox/rc.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <desktops>
+    <number>1</number>
+  </desktops>
+  <applications>
+    <application class="*">
+      <maximized>yes</maximized>
+      <iconic>no</iconic>
+      <focus>yes</focus>
+    </application>
+  </applications>
+</openbox_config>
+EOF
+cp -f /root/.config/openbox/rc.xml /etc/xdg/openbox/rc.xml 2>/dev/null || true
+
 echo "Starting openbox..."
 openbox --sm-disable &
 sleep 1
@@ -71,13 +89,15 @@ echo "Starting tint2 panel..."
 tint2 &
 sleep 1
 
-# 4. Initialize clean profile directory if needed
+# 4. Initialize profile directory and clean any stale locks
 mkdir -p /app/chrome_profile
+rm -f /app/chrome_profile/Singleton* 2>/dev/null || true
 
 # 5. Launch Google Chrome in supervised loop with memory constraints
 echo "Starting Chrome supervisor..."
 (
     while true; do
+        rm -f /app/chrome_profile/Singleton* 2>/dev/null || true
         echo "Launching Google Chrome with Violentmonkey..."
         google-chrome-stable \
             --display="${DISPLAY}" \
@@ -97,26 +117,9 @@ echo "Starting Chrome supervisor..."
             --disable-features=Translate,OptimizationHints,MediaRouter \
             --user-data-dir=/app/chrome_profile \
             --load-extension=/app/extensions/violentmonkey \
-            https://teaserfast.ru/login/ || true
+            https://teaserfast.ru/login/ 2>&1 | tee -a /tmp/chrome.log || true
         echo "Chrome exited, restarting in 2 seconds..."
         sleep 2
-    done
-) &
-
-# Ensure visible Chrome window is active and raised
-(
-    for i in $(seq 1 30); do
-        sleep 1
-        WID=$(xdotool search --onlyvisible --class "google-chrome" 2>/dev/null | tail -n 1 || true)
-        if [ -z "$WID" ]; then
-            WID=$(xdotool search --onlyvisible --class "chromium" 2>/dev/null | tail -n 1 || true)
-        fi
-        if [ -n "$WID" ]; then
-            echo "Activating visible Chrome window: $WID"
-            xdotool windowactivate "$WID" 2>/dev/null || true
-            xdotool windowraise "$WID" 2>/dev/null || true
-            break
-        fi
     done
 ) &
 
