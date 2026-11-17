@@ -8,8 +8,7 @@ ENV RESOLUTION=1280x720x24
 RUN apt-get update && apt-get install -y \
     xvfb \
     x11vnc \
-    openbox \
-    tint2 \
+    fluxbox \
     menu \
     python3 \
     python3-pip \

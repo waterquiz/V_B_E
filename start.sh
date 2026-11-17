@@ -21,8 +21,7 @@ cleanup() {
     pkill -f websockify 2>/dev/null || true
     pkill -f "google-chrome" 2>/dev/null || true
     pkill -f "chromium-browser" 2>/dev/null || true
-    pkill -f openbox 2>/dev/null || true
-    pkill -f tint2 2>/dev/null || true
+    pkill -f fluxbox 2>/dev/null || true
     pkill -f dbus-daemon 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -59,103 +58,42 @@ done
 
 export DISPLAY="${DISPLAY}"
 
-# Set a background color
+# Set desktop background
 xsetroot -solid "#2c3e50" 2>/dev/null || true
 
-# 3. Pre-configure Developer Mode and pinned extension in Preferences
-echo "Pre-configuring Chrome Preferences..."
-mkdir -p /app/chrome_profile/Default
-
-cat <<EOF > /app/chrome_profile/Default/Preferences
-{
-  "extensions": {
-    "ui": {
-      "developer_mode": true
-    },
-    "pinned_extensions": [
-      "oclhhmlkjfdjmklecinlepakkifmkaja"
-    ],
-    "settings": {
-      "oclhhmlkjfdjmklecinlepakkifmkaja": {
-        "user_scripts_granted": true,
-        "incognito_access": true
-      }
-    }
-  }
-}
+# 3. Start Fluxbox Window Manager
+echo "Starting fluxbox..."
+mkdir -p /root/.fluxbox
+cat << 'EOF' > /root/.fluxbox/init
+session.screen0.toolbar.visible: false
 EOF
-
-# 4. Openbox Window Manager Configuration
-mkdir -p /root/.config/openbox /etc/xdg/openbox
-cat << 'EOF' > /root/.config/openbox/rc.xml
-<?xml version="1.0" encoding="UTF-8"?>
-<openbox_config xmlns="http://openbox.org/3.4/rc">
-  <desktops>
-    <number>1</number>
-  </desktops>
-  <applications>
-    <application class="*">
-      <maximized>yes</maximized>
-      <focus>yes</focus>
-    </application>
-  </applications>
-</openbox_config>
-EOF
-cp /root/.config/openbox/rc.xml /etc/xdg/openbox/rc.xml 2>/dev/null || true
-
-echo "Starting openbox window manager..."
-openbox --sm-disable &
+fluxbox &
 sleep 1
 
-echo "Starting tint2 taskbar..."
-tint2 &
-sleep 1
+# 4. Clean profile directory to avoid corrupt preferences on startup
+rm -rf /app/chrome_profile/Default/Preferences 2>/dev/null || true
+mkdir -p /app/chrome_profile
 
-# 5. Launch Chrome in supervised loop with software compositing
+# 5. Launch Google Chrome in supervised loop
 echo "Starting Chrome supervisor..."
 (
     while true; do
-        echo "Launching Chrome with Violentmonkey..."
-        chromium-browser \
+        echo "Launching Google Chrome with Violentmonkey..."
+        google-chrome-stable \
+            --display="${DISPLAY}" \
             --no-sandbox \
             --disable-dev-shm-usage \
             --disable-gpu \
-            --disable-gpu-compositing \
-            --password-store=basic \
-            --ozone-platform=x11 \
-            --enable-features=UseOzonePlatform \
             --start-maximized \
             --no-first-run \
             --no-default-browser-check \
-            --disable-translate \
-            --disable-notifications \
-            --disable-default-apps \
             --window-size=1280,720 \
             --window-position=0,0 \
-            --noerrdialogs \
             --user-data-dir=/app/chrome_profile \
             --load-extension=/app/extensions/violentmonkey \
-            --disable-features=Translate,OptimizationHints,MediaRouter \
             https://teaserfast.ru/login/ || true
         echo "Chrome exited, restarting in 2 seconds..."
         sleep 2
-    done
-) &
-
-# Ensure visible Chrome window is active and raised
-(
-    for i in $(seq 1 30); do
-        sleep 1
-        WID=$(xdotool search --onlyvisible --class "google-chrome" 2>/dev/null | tail -n 1 || true)
-        if [ -z "$WID" ]; then
-            WID=$(xdotool search --onlyvisible --class "chromium" 2>/dev/null | tail -n 1 || true)
-        fi
-        if [ -n "$WID" ]; then
-            echo "Activating visible Chrome window: $WID"
-            xdotool windowactivate "$WID" 2>/dev/null || true
-            xdotool windowraise "$WID" 2>/dev/null || true
-            break
-        fi
     done
 ) &
 

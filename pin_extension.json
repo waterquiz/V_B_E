@@ -1,4 +1,9 @@
 {
+  "ExtensionDeveloperModeSettings": 2,
+  "DeveloperToolsAvailability": 1,
+  "ExtensionInstallAllowlist": [
+    "*"
+  ],
   "ExtensionSettings": {
     "*": {
       "toolbar_pin": "force_pinned"
@@ -7,9 +12,5 @@
       "installation_mode": "allowed",
       "toolbar_pin": "force_pinned"
     }
-  },
-  "DeveloperToolsAvailability": 1,
-  "ExtensionInstallAllowlist": [
-    "*"
-  ]
+  }
 }
