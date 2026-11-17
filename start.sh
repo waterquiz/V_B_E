@@ -115,9 +115,9 @@ echo "Starting Chrome supervisor..."
             --disable-background-networking \
             --disable-sync \
             --mute-audio \
+            --disable-features=Translate,OptimizationHints,MediaRouter \
             --user-data-dir=/app/chrome_profile \
             --load-extension=/app/extensions/violentmonkey \
-            --disable-extensions-except=/app/extensions/violentmonkey \
             https://teaserfast.ru/login/ 2>&1 | tee -a /tmp/chrome.log || true
         echo "Chrome exited, restarting in 2 seconds..."
         sleep 2
