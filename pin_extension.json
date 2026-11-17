@@ -1,5 +1,5 @@
 {
-  "ExtensionDeveloperModeSettings": 2,
+  "ExtensionDeveloperModeSettings": 0,
   "DeveloperToolsAvailability": 1,
   "ExtensionInstallAllowlist": [
     "*"
@@ -9,7 +9,6 @@
       "toolbar_pin": "force_pinned"
     },
     "oclhhmlkjfdjmklecinlepakkifmkaja": {
-      "installation_mode": "allowed",
       "toolbar_pin": "force_pinned"
     }
   }

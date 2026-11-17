@@ -89,19 +89,22 @@ echo "Starting tint2 panel..."
 tint2 &
 sleep 1
 
-# 4. Initialize profile directory and clean any stale locks
-mkdir -p /app/chrome_profile
+# 4. Initialize profile directory, configure preferences, and clean any stale locks
+mkdir -p /app/chrome_profile/Default
 rm -f /app/chrome_profile/Singleton* 2>/dev/null || true
+python3 /app/configure_chrome.py 2>/dev/null || true
 
-# 5. Launch Google Chrome in supervised loop with memory constraints
+# 5. Launch Google Chrome in supervised loop
 echo "Starting Chrome supervisor..."
 (
     while true; do
         rm -f /app/chrome_profile/Singleton* 2>/dev/null || true
+        python3 /app/configure_chrome.py 2>/dev/null || true
         echo "Launching Google Chrome with Violentmonkey..."
         google-chrome-stable \
             --display="${DISPLAY}" \
             --no-sandbox \
+            --disable-setuid-sandbox \
             --disable-dev-shm-usage \
             --disable-gpu \
             --start-maximized \
@@ -112,21 +115,16 @@ echo "Starting Chrome supervisor..."
             --disable-background-networking \
             --disable-sync \
             --mute-audio \
-            --js-flags="--max-old-space-size=256" \
-            --renderer-process-limit=2 \
-            --disable-features=Translate,OptimizationHints,MediaRouter \
             --user-data-dir=/app/chrome_profile \
             --load-extension=/app/extensions/violentmonkey \
+            --disable-extensions-except=/app/extensions/violentmonkey \
             https://teaserfast.ru/login/ 2>&1 | tee -a /tmp/chrome.log || true
         echo "Chrome exited, restarting in 2 seconds..."
         sleep 2
     done
 ) &
 
-# 6. Run Chrome preferences & pinning agent in background
-python3 /app/configure_chrome.py &
-
-# 7. Start x11vnc with polling and damage
+# 6. Start x11vnc with polling and damage
 echo "Starting x11vnc..."
 if [ -n "$VNC_PASSWORD" ]; then
     x11vnc -display "${DISPLAY}" -rfbport "${VNC_PORT}" \
@@ -139,7 +137,7 @@ else
 fi
 sleep 2
 
-# 8. Start noVNC / websockify
+# 7. Start noVNC / websockify
 echo "Starting noVNC on port ${WEB_PORT}..."
 websockify --web "${NOVNC_DIR}" "${WEB_PORT}" "localhost:${VNC_PORT}" &
 
