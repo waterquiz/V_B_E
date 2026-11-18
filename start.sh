@@ -92,14 +92,18 @@ sleep 1
 # 4. Initialize profile directory, configure preferences, and clean any stale locks
 mkdir -p /app/chrome_profile/Default
 rm -f /app/chrome_profile/Singleton* 2>/dev/null || true
-python3 /app/configure_chrome.py 2>/dev/null || true
+python3 /app/configure_chrome.py --init 2>/dev/null || true
 
-# 5. Launch Google Chrome in supervised loop
+# 5. Launch Google Chrome in supervised loop with CDP automation
 echo "Starting Chrome supervisor..."
 (
     while true; do
         rm -f /app/chrome_profile/Singleton* 2>/dev/null || true
-        python3 /app/configure_chrome.py 2>/dev/null || true
+        python3 /app/configure_chrome.py --init 2>/dev/null || true
+        
+        # Start background helper to load extension and navigate via CDP
+        python3 /app/configure_chrome.py &
+        
         echo "Launching Google Chrome with Violentmonkey..."
         google-chrome-stable \
             --display="${DISPLAY}" \
@@ -110,15 +114,17 @@ echo "Starting Chrome supervisor..."
             --start-maximized \
             --no-first-run \
             --no-default-browser-check \
-            --window-size=1280,720 \
-            --window-position=0,0 \
+            --disable-session-crashed-bubble \
+            --disable-infobars \
             --disable-background-networking \
             --disable-sync \
             --mute-audio \
+            --ignore-certificate-errors \
             --disable-features=Translate,OptimizationHints,MediaRouter \
+            --remote-debugging-port=9222 \
             --user-data-dir=/app/chrome_profile \
-            --load-extension=/app/extensions/violentmonkey \
-            https://teaserfast.ru/login/ 2>&1 | tee -a /tmp/chrome.log || true
+            about:blank 2>&1 | tee -a /tmp/chrome.log || true
+        
         echo "Chrome exited, restarting in 2 seconds..."
         sleep 2
     done
