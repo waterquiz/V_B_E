@@ -89,9 +89,9 @@ echo "Starting tint2 panel..."
 tint2 &
 sleep 1
 
-# 4. Initialize clean profile directory
+# 4. Wipe any corrupted previous profile and initialize fresh clean profile
+rm -rf /app/chrome_profile
 mkdir -p /app/chrome_profile
-rm -f /app/chrome_profile/Singleton* 2>/dev/null || true
 
 # 5. Launch default Google Chrome in supervised loop
 echo "Starting Chrome supervisor..."
@@ -103,7 +103,6 @@ echo "Starting Chrome supervisor..."
             --display="${DISPLAY}" \
             --no-sandbox \
             --disable-setuid-sandbox \
-            --no-zygote \
             --disable-dev-shm-usage \
             --disable-gpu \
             --start-maximized \
@@ -112,7 +111,8 @@ echo "Starting Chrome supervisor..."
             --disable-session-crashed-bubble \
             --disable-infobars \
             --disable-features=Translate,OptimizationHints,MediaRouter \
-            --user-data-dir=/app/chrome_profile 2>&1 | tee -a /tmp/chrome.log || true
+            --user-data-dir=/app/chrome_profile \
+            about:blank 2>&1 | tee -a /tmp/chrome.log || true
         
         echo "Chrome exited, restarting in 2 seconds..."
         sleep 2
