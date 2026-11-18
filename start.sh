@@ -89,26 +89,21 @@ echo "Starting tint2 panel..."
 tint2 &
 sleep 1
 
-# 4. Initialize profile directory, configure preferences, and clean any stale locks
-mkdir -p /app/chrome_profile/Default
+# 4. Initialize clean profile directory
+mkdir -p /app/chrome_profile
 rm -f /app/chrome_profile/Singleton* 2>/dev/null || true
-python3 /app/configure_chrome.py --init 2>/dev/null || true
 
-# 5. Launch Google Chrome in supervised loop with CDP automation
+# 5. Launch default Google Chrome in supervised loop
 echo "Starting Chrome supervisor..."
 (
     while true; do
         rm -f /app/chrome_profile/Singleton* 2>/dev/null || true
-        python3 /app/configure_chrome.py --init 2>/dev/null || true
-        
-        # Start background helper to load extension and navigate via CDP
-        python3 /app/configure_chrome.py &
-        
-        echo "Launching Google Chrome with Violentmonkey..."
+        echo "Launching default Google Chrome..."
         google-chrome-stable \
             --display="${DISPLAY}" \
             --no-sandbox \
             --disable-setuid-sandbox \
+            --no-zygote \
             --disable-dev-shm-usage \
             --disable-gpu \
             --start-maximized \
@@ -116,14 +111,8 @@ echo "Starting Chrome supervisor..."
             --no-default-browser-check \
             --disable-session-crashed-bubble \
             --disable-infobars \
-            --disable-background-networking \
-            --disable-sync \
-            --mute-audio \
-            --ignore-certificate-errors \
             --disable-features=Translate,OptimizationHints,MediaRouter \
-            --remote-debugging-port=9222 \
-            --user-data-dir=/app/chrome_profile \
-            about:blank 2>&1 | tee -a /tmp/chrome.log || true
+            --user-data-dir=/app/chrome_profile 2>&1 | tee -a /tmp/chrome.log || true
         
         echo "Chrome exited, restarting in 2 seconds..."
         sleep 2

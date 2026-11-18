@@ -1,15 +1,1 @@
-{
-  "ExtensionDeveloperModeSettings": 0,
-  "DeveloperToolsAvailability": 1,
-  "ExtensionInstallAllowlist": [
-    "*"
-  ],
-  "ExtensionSettings": {
-    "*": {
-      "toolbar_pin": "force_pinned"
-    },
-    "oclhhmlkjfdjmklecinlepakkifmkaja": {
-      "toolbar_pin": "force_pinned"
-    }
-  }
-}
+{}
